@@ -1,0 +1,717 @@
+[
+  "Go",
+  [
+    "󰀻  Apps"
+  ],
+  [
+    "󰧑  Learn",
+    [
+      "  Keybindings"
+    ],
+    [
+      "  Omarchy"
+    ],
+    [
+      "  Hyprland"
+    ],
+    [
+      "󰣇  Arch"
+    ],
+    [
+      "  Neovim"
+    ],
+    [
+      "󱆃  Bash"
+    ]
+  ],
+  [
+    "󱓞  Trigger",
+    [
+      "󰔛  Reminder",
+      [
+        "󰔛  Set one"
+      ],
+      [
+        "󰔛  Show all"
+      ],
+      [
+        "󰔛  Clear all"
+      ]
+    ],
+    [
+      "  Capture",
+      [
+        "  Screenshot"
+      ],
+      [
+        "  Screenrecord"
+      ],
+      [
+        "󰴑  Text Extraction"
+      ],
+      [
+        "󰃉  Color"
+      ]
+    ],
+    [
+      "󰧸  Transcode"
+    ],
+    [
+      "  Share",
+      [
+        "  Clipboard"
+      ],
+      [
+        "  File"
+      ],
+      [
+        "  Folder"
+      ]
+    ],
+    [
+      "󰔎  Toggle",
+      [
+        "󱄄  Screensaver"
+      ],
+      [
+        "󰔎  Nightlight"
+      ],
+      [
+        "󱫖  Idle Lock"
+      ],
+      [
+        "󰂛  Notifications"
+      ],
+      [
+        "󰍜  Top Bar"
+      ],
+      [
+        "󱂬  Workspace Layout"
+      ],
+      [
+        "  Window Gaps"
+      ],
+      [
+        "  1-Window Ratio"
+      ],
+      [
+        "󰍹  Monitor Scaling"
+      ],
+      [
+        "  Direct Boot"
+      ],
+      [
+        "󰟵  Passwordless Sudo"
+      ]
+    ],
+    [
+      "  Hardware",
+      [
+        "󰛧  Laptop Display"
+      ],
+      [
+        "󰍹  Mirror Display"
+      ],
+      [
+        "  Hybrid GPU"
+      ],
+      [
+        "󰟸  Touchpad"
+      ],
+      [
+        "󰌌  Touchpad Haptics"
+      ],
+      [
+        "󰆽  Touchscreen"
+      ]
+    ]
+  ],
+  [
+    "  Style",
+    [
+      "󰸌  Theme"
+    ],
+    [
+      "󰟵  Unlock"
+    ],
+    [
+      "  Font"
+    ],
+    [
+      "  Background"
+    ],
+    [
+      "  Hyprland"
+    ],
+    [
+      "󱄄  Screensaver",
+      [
+        "  Edit Text"
+      ],
+      [
+        "  Set From Image"
+      ],
+      [
+        "  Restore Default"
+      ]
+    ],
+    [
+      "  About",
+      [
+        "  Edit Text"
+      ],
+      [
+        "  Set From Image"
+      ],
+      [
+        "  Restore Default"
+      ]
+    ]
+  ],
+  [
+    "  Setup",
+    [
+      "  Audio"
+    ],
+    [
+      "  Wifi"
+    ],
+    [
+      "󰂯  Bluetooth"
+    ],
+    [
+      "󱐋  Power Profile"
+    ],
+    [
+      "  System Sleep",
+      [
+        "󰒲  Enable/Disable Suspend"
+      ],
+      [
+        "󰤁  Enable/Disable Hibernate"
+      ]
+    ],
+    [
+      "󰍹  Monitors"
+    ],
+    [
+      "  Keybindings"
+    ],
+    [
+      "  Input"
+    ],
+    [
+      "  Defaults",
+      [
+        "  Browser"
+      ],
+      [
+        "  Terminal"
+      ],
+      [
+        "  Editor"
+      ]
+    ],
+    [
+      "󰱔  DNS"
+    ],
+    [
+      "  Security",
+      [
+        "󰈷  Fingerprint"
+      ],
+      [
+        "  Fido2"
+      ]
+    ],
+    [
+      "  Config",
+      [
+        "  Hyprland"
+      ],
+      [
+        "  Hypridle"
+      ],
+      [
+        "  Hyprlock"
+      ],
+      [
+        "  Hyprsunset"
+      ],
+      [
+        "  Swayosd"
+      ],
+      [
+        "󰌧  Walker"
+      ],
+      [
+        "󰍜  Waybar"
+      ],
+      [
+        "󰞅  XCompose"
+      ]
+    ]
+  ],
+  [
+    "󰉉  Install",
+    [
+      "󰣇  Package"
+    ],
+    [
+      "󰣇  AUR"
+    ],
+    [
+      "  Web App"
+    ],
+    [
+      "  TUI"
+    ],
+    [
+      "  Service",
+      [
+        "  Dropbox"
+      ],
+      [
+        "  Tailscale"
+      ],
+      [
+        "󱇱  NordVPN"
+      ],
+      [
+        "󰏖  ONCE"
+      ],
+      [
+        "󰟵  Bitwarden"
+      ],
+      [
+        "  Chromium Account"
+      ]
+    ],
+    [
+      "  Style",
+      [
+        "󰸌  Theme"
+      ],
+      [
+        "  Background"
+      ],
+      [
+        "  Font"
+      ]
+    ],
+    [
+      "󰵮  Development",
+      [
+        "󰫏  Ruby on Rails"
+      ],
+      [
+        "  Docker DB"
+      ],
+      [
+        "  JavaScript"
+      ],
+      [
+        "  Go"
+      ],
+      [
+        "  PHP"
+      ],
+      [
+        "  Python"
+      ],
+      [
+        "  Elixir"
+      ],
+      [
+        "  Zig"
+      ],
+      [
+        "  Rust"
+      ],
+      [
+        "  Java"
+      ],
+      [
+        "  .NET"
+      ],
+      [
+        "  OCaml"
+      ],
+      [
+        "  Clojure"
+      ],
+      [
+        "  Scala"
+      ]
+    ],
+    [
+      "  Editor",
+      [
+        "  VSCode"
+      ],
+      [
+        "  Cursor"
+      ],
+      [
+        "  Zed"
+      ],
+      [
+        "  Sublime Text"
+      ],
+      [
+        "  Helix"
+      ],
+      [
+        "  Vim"
+      ],
+      [
+        "  Emacs"
+      ]
+    ],
+    [
+      "  Terminal",
+      [
+        "  Alacritty"
+      ],
+      [
+        "  Foot"
+      ],
+      [
+        "  Ghostty"
+      ],
+      [
+        "  Kitty"
+      ]
+    ],
+    [
+      "  Browser",
+      [
+        "  Chrome"
+      ],
+      [
+        "  Edge"
+      ],
+      [
+        "  Brave"
+      ],
+      [
+        "  Brave Origin"
+      ],
+      [
+        "  Firefox"
+      ],
+      [
+        "󰖟  Zen"
+      ]
+    ],
+    [
+      "󱚤  AI",
+      [
+        "  Dictation"
+      ],
+      [
+        "󱚤  LM Studio"
+      ],
+      [
+        "󱚤  Ollama"
+      ],
+      [
+        "󱚤  Crush"
+      ]
+    ],
+    [
+      "  Gaming",
+      [
+        "  Steam"
+      ],
+      [
+        "  RetroArch"
+      ],
+      [
+        "󰍳  Minecraft"
+      ],
+      [
+        "󰢹  NVIDIA GeForce NOW"
+      ],
+      [
+        "  Xbox Cloud Gaming"
+      ],
+      [
+        "󰂯  Xbox Controller"
+      ],
+      [
+        "󰍹  Moonlight"
+      ],
+      [
+        "  Lutris"
+      ],
+      [
+        "󱓟  Heroic"
+      ]
+    ],
+    [
+      "󰍲  Windows"
+    ]
+  ],
+  [
+    "󰭌  Remove",
+    [
+      "󰣇  Package"
+    ],
+    [
+      "  Web App"
+    ],
+    [
+      "  TUI"
+    ],
+    [
+      "󰵮  Development",
+      [
+        "󰫏  Ruby on Rails"
+      ],
+      [
+        "  JavaScript"
+      ],
+      [
+        "  Go"
+      ],
+      [
+        "  PHP"
+      ],
+      [
+        "  Python"
+      ],
+      [
+        "  Elixir"
+      ],
+      [
+        "  Zig"
+      ],
+      [
+        "  Rust"
+      ],
+      [
+        "  Java"
+      ],
+      [
+        "  .NET"
+      ],
+      [
+        "  OCaml"
+      ],
+      [
+        "  Clojure"
+      ],
+      [
+        "  Scala"
+      ]
+    ],
+    [
+      "󰸌  Theme"
+    ],
+    [
+      "  Browser",
+      [
+        "  Chrome"
+      ],
+      [
+        "  Edge"
+      ],
+      [
+        "  Brave"
+      ],
+      [
+        "  Brave Origin"
+      ],
+      [
+        "  Firefox"
+      ],
+      [
+        "  Zen"
+      ]
+    ],
+    [
+      "  Dictation"
+    ],
+    [
+      "  Gaming",
+      [
+        "  Steam"
+      ],
+      [
+        "  RetroArch"
+      ],
+      [
+        "󰍳  Minecraft"
+      ],
+      [
+        "󰢹  NVIDIA GeForce NOW"
+      ],
+      [
+        "  Xbox Cloud Gaming"
+      ],
+      [
+        "󰂯  Xbox Controller"
+      ],
+      [
+        "󰍹  Moonlight"
+      ],
+      [
+        "  Lutris"
+      ],
+      [
+        "󱓟  Heroic"
+      ]
+    ],
+    [
+      "󰍲  Windows"
+    ],
+    [
+      "󰏓  Preinstalls"
+    ],
+    [
+      "  Security",
+      [
+        "󰈷  Fingerprint"
+      ],
+      [
+        "  Fido2"
+      ]
+    ]
+  ],
+  [
+    "  Update",
+    [
+      "  Omarchy"
+    ],
+    [
+      "󰔫  Channel",
+      [
+        "🟢  Stable"
+      ],
+      [
+        "🟡  RC"
+      ],
+      [
+        "🟠  Edge"
+      ],
+      [
+        "🔴  Dev"
+      ]
+    ],
+    [
+      "  Config",
+      [
+        "  Hyprland"
+      ],
+      [
+        "  Hypridle"
+      ],
+      [
+        "  Hyprlock"
+      ],
+      [
+        "  Hyprsunset"
+      ],
+      [
+        "󱣴  Plymouth"
+      ],
+      [
+        "  Swayosd"
+      ],
+      [
+        "  Tmux"
+      ],
+      [
+        "󰌧  Walker"
+      ],
+      [
+        "󰍜  Waybar"
+      ]
+    ],
+    [
+      "󰸌  Extra Themes"
+    ],
+    [
+      "  Process",
+      [
+        "  Hypridle"
+      ],
+      [
+        "  Hyprsunset"
+      ],
+      [
+        "󰎟  Mako"
+      ],
+      [
+        "  Swayosd"
+      ],
+      [
+        "󰌧  Walker"
+      ],
+      [
+        "󰍜  Waybar"
+      ]
+    ],
+    [
+      "󰇅  Hardware",
+      [
+        "  Audio"
+      ],
+      [
+        "󱚾  Wi-Fi"
+      ],
+      [
+        "󰂯  Bluetooth"
+      ],
+      [
+        "󰟸  Trackpad"
+      ]
+    ],
+    [
+      "  Firmware"
+    ],
+    [
+      "  Password",
+      [
+        "  Drive Encryption"
+      ],
+      [
+        "  User"
+      ]
+    ],
+    [
+      "  Timezone"
+    ],
+    [
+      "  Time"
+    ]
+  ],
+  [
+    "  About"
+  ],
+  [
+    "  System",
+    [
+      "󱄄  Screensaver"
+    ],
+    [
+      "  Lock"
+    ],
+    [
+      "󰒲  Suspend"
+    ],
+    [
+      "󰤁  Hibernate"
+    ],
+    [
+      "󰍃  Logout"
+    ],
+    [
+      "󰜉  Restart"
+    ],
+    [
+      "󰐥  Shutdown"
+    ]
+  ]
+]

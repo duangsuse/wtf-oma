@@ -1,0 +1,131 @@
+<!doctype html>
+<!-- Omarchy Go… 菜单 · 浏览器版: xterm.js 当终端, PyScript(MicroPython) 跑同一份 menu.py
+     需要静态服务器(fetch/files 不支持 file://):  python3 -m http.server  然后打开 http://localhost:8000/
+     URL 参数 = 命令行参数:  /?Learn/Arch   /?pop=stack&Trigger/Toggle
+     Hook: window.menuHook = (kind, data) => {...}  kind = path | blur ; 同时派发 CustomEvent('menu:path'|'menu:blur') -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omarchy Go…</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+<link rel="stylesheet" href="https://pyscript.net/releases/2025.8.1/core.css">
+<style>
+  /* 图标: 优先用本机已装的 Nerd Font, 否则回落到 Symbols Nerd Font(只含图标, 叠在任意等宽字体上) */
+  @font-face {
+    font-family: "NF Symbols";
+    src: local("Symbols Nerd Font Mono"),
+         url("https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@v3.2.1/patched-fonts/NerdFontsSymbolsOnly/SymbolsNerdFontMono-Regular.ttf");
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #020b14; color: #6a8aa0; font: 13px ui-monospace, monospace; }
+  #t { position: absolute; inset: 0 0 150px 0; overflow: hidden; }   /* 不要给 #t 加 padding: FitAddon 不会扣掉父元素的 padding */
+  #t .xterm { padding: 8px; height: 100%; box-sizing: border-box; }
+  #log { position: absolute; left: 0; right: 0; bottom: 0; height: 150px; margin: 0; padding: 8px 12px; box-sizing: border-box;
+         overflow: auto; border-top: 1px solid #1a4d1a; white-space: pre-wrap; }
+  #log b { color: #1f8c1f; font-weight: normal; }
+</style>
+</head>
+<body>
+<div id="t"></div>
+<pre id="log"><b>hook log</b> — menu:path / menu:blur 事件会出现在这里
+</pre>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.8.0/lib/addon-unicode11.js"></script>
+<script type="module">
+  // ---- hook 点: 页面上任何代码都可以覆盖 window.menuHook, 或监听 menu:* 事件 ----
+  const log = document.getElementById("log");
+  window.menuHook = (kind, data) => window.dispatchEvent(new CustomEvent("menu:" + kind, { detail: data }));
+  // Python 侧把异常送过来: mpy 的未捕获异常只进 devtools, 页面上看起来就只是"终端没反应"
+  window.menuError = (where, msg) => {
+    log.insertAdjacentHTML("beforeend", `<b style="color:#e06c75">${where}</b> ${msg.replace(/</g, "&lt;")}\n`);
+    log.scrollTop = log.scrollHeight;
+  };
+  for (const k of ["path", "blur"])
+    addEventListener("menu:" + k, e => { log.insertAdjacentHTML("beforeend", `<b>${k}</b> ${e.detail}\n`); log.scrollTop = log.scrollHeight; });
+
+  // ---- 终端: 字体先加载好再量格子, 否则宽度算错 ----
+  const FONT = '"JetBrainsMono Nerd Font Mono", "NF Symbols", ui-monospace, "DejaVu Sans Mono", monospace';
+  await Promise.allSettled([document.fonts.load('14px "NF Symbols"', "󰀻")]);
+  const term = new Terminal({ fontFamily: FONT, fontSize: 15, allowProposedApi: true, cursorBlink: false,
+                              theme: { background: "#020b14", foreground: "#cfe8f5" } });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.loadAddon(new Unicode11Addon.Unicode11Addon());
+  term.unicode.activeVersion = "11";                   // emoji / CJK 宽度
+  term.open(document.getElementById("t"));
+  fit.fit(); term.focus();
+  addEventListener("resize", () => fit.fit());
+  term.onResize(() => window.menuResize?.());
+  // 输入: xterm.js 的 onData 吐出的就是真 tty 会收到的字节流(含 SGR 鼠标), 原样交给 Python 的 feed(), 无需模拟按键
+  term.onData(d => window.menuFeed?.(d));
+  document.getElementById("t").addEventListener("mousedown", () => term.focus());
+  window.term = term;
+</script>
+
+<script type="mpy" config='{"files": {"./menu.py": "./menu.py", "./gra.py": "./gra.py"}}'>
+import menu
+from pyscript import window
+from pyscript.ffi import create_proxy
+
+import asyncio
+while not window.term: await asyncio.sleep(0.05)     # 等上面的 module 脚本(字体加载)建好终端
+
+# 把核心的三个终端钩子接到 xterm.js
+menu.size = lambda: (window.term.cols, window.term.rows)
+menu.out = lambda s: window.term.write(s)
+
+# 树: fetch tree.json, 任何失败都回滚内置菜单(与 CLI 一致)
+try:
+    r = await window.fetch("tree.json")
+    if not r.ok: raise ValueError("HTTP " + str(r.status))
+    tree, note = menu.load_tree(text=await r.text())
+except Exception as e:
+    tree, note = menu.DEFAULT_TREE, "tree.json 加载失败: " + str(e)
+
+# URL 查询串 = 命令行参数
+args = [window.decodeURIComponent(a) for a in window.location.search[1:].split("&") if a]
+
+def onpath(s):
+    window.menuHook("path", s)
+
+def onblur(x, y, open):
+    window.menuHook("blur", str(x) + "," + str(y))
+    open(x, y)                                   # 默认行为: 在点击处开新根菜单
+
+def err(where):
+    """异常写到页面 #log。MicroPython 没有 traceback 模块, 用 sys.print_exception"""
+    import io, sys
+    b = io.StringIO()
+    try: sys.print_exception(sys.exc_info()[1], b)
+    except Exception:
+        import traceback; traceback.print_exc(file=b)
+    window.menuError(where, b.getvalue().strip() or "unknown")
+
+sess = {"s": None}
+def boot():
+    try:
+        sess["s"] = s = menu.start(tree, onpath, onblur=onblur, args=args)
+    except Exception:
+        sess["s"] = None
+        err("menu.start 失败(常见原因: index.html 与 menu.py 版本不一致, 硬刷 Ctrl-Shift-R)")
+        return
+    if note: menu.STATUS = note; s.render()
+
+def on_data(d):
+    s = sess["s"]
+    if s is None: return                         # boot 已失败, 别再抛二次异常把真正的错盖掉
+    try:
+        if s.feed(d):                            # Ctrl-C / 关掉最后一个窗口: 终端复位后重新开始
+            menu.out(menu.LEAVE); boot()
+    except Exception:
+        sess["s"] = None; err("feed 失败")
+
+window.menuFeed = create_proxy(on_data)
+window.menuResize = create_proxy(lambda *a: sess["s"] and sess["s"].render())
+boot()
+</script>
+<script type="module" src="https://pyscript.net/releases/2025.8.1/core.js"></script>
+</body>
+</html>
