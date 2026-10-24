@@ -24,6 +24,7 @@ KEYS = {"\x1b[A": "up", "\x1bOA": "up", "\x1b[B": "down", "\x1bOB": "down",
         "\r": "enter", "\n": "enter", "\x1b": "esc", "q": "quit", "Q": "quit",
         "\x03": "quit"}
 MENU_W = 46
+MENU_TOP, MENU_ROWS = 14, 10      # 菜单画在下半屏(第 14 行起: 标题 + 10 个可见项 + 错误行), 上半屏的预览不被盖住
 
 GREEN, RED, DIM, REV, RST = "\x1b[32m", "\x1b[31m", "\x1b[2m", "\x1b[7m", "\x1b[0m"
 
@@ -92,14 +93,22 @@ class Viewer:
         w(f"\x1b[27;1H\x1b[2K{DIM}{cut('←菜单  →0.3x播放  ↑↓首/尾/diff  数字跳转  Enter重跑  Q退出', cols - 1)}{RST}")
 
     def draw_menu(self):
-        w(f"\x1b[2;1H{REV}{cut(' 测试点  ↑↓/数字选择  →/Enter/←收起', MENU_W)}{RST}")
-        row = 3
-        for k, t in enumerate(self.tests):
+        n = len(self.tests)
+        top = min(max(getattr(self, "top", 0), self.i - MENU_ROWS + 1), self.i)     # 当前项保持在可见窗口内
+        self.top = max(0, min(top, n - MENU_ROWS))
+        head = f" 测试点 {self.i + 1}/{n}  ↑↓/数字选择  →/Enter/←收起"
+        w(f"\x1b[{MENU_TOP};1H{REV}{cut(head, MENU_W)}{RST}")
+        for r in range(MENU_ROWS):
+            k, row = self.top + r, MENU_TOP + 1 + r
+            if k >= n:
+                w(f"\x1b[{row};1H{' ' * MENU_W}")
+                continue
+            t = self.tests[k]
             mark = f"{GREEN}✓{RST}" if t["ok"] else f"{RED}✗{RST}"
             cur = REV if k == self.i else ""
-            w(f"\x1b[{row};1H {mark} {cur}{cut(t['id'][-2:] + ' ' + t['name'], MENU_W - 3)}{RST}")
-            row += 1
+            w(f"\x1b[{row};1H {mark} {cur}{cut(t['id'] + ' ' + t['name'], MENU_W - 3)}{RST}")
         err = self.tests[self.i]["error"]
+        row = MENU_TOP + 1 + MENU_ROWS
         w(f"\x1b[{row};1H{RED}{cut(err, MENU_W)}{RST}" if err else f"\x1b[{row};1H{' ' * MENU_W}")
 
     # ------------------------------------------------------------ actions

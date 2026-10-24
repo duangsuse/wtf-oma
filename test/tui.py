@@ -11,7 +11,7 @@ a callable takes as many following items as it has parameters after `c`.
 `only_fg, color` narrows and `chr_count, N` (or "x<k>" vs the first frame) checks.
 All tests of a file share one menu.py process, in name order.
 """
-import fcntl, glob, importlib.util, inspect, json, os, pty, re, select, signal, struct, sys
+import fcntl, glob, importlib.util, inspect, json, os, pty, re, select, shlex, signal, struct, sys
 import termios, threading, time
 
 import pyte
@@ -19,7 +19,7 @@ import pyte
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "test", "out")
 COLS, ROWS = 80, 24
-CMD = ["python3", os.path.join(ROOT, "menu.py")]
+CMD = os.environ["OMA_CMD"].split() if "OMA_CMD" in os.environ else ["python3", os.path.join(ROOT, "menu.py")]
 
 
 def fg_name(fg):
@@ -96,7 +96,7 @@ class Frame:
 
 
 class Session:
-    def __init__(self, cast_path, env=None):
+    def __init__(self, cast_path, env=None, cmd=None):
         self.cast_path = cast_path
         self.screen = pyte.Screen(COLS, ROWS)
         self.stream = pyte.ByteStream(self.screen)
@@ -112,7 +112,9 @@ class Session:
         self.t0 = time.monotonic()
         pid, fd = pty.fork()
         if pid == 0:
-            os.execvpe(CMD[0], CMD, e)
+            os.chdir(ROOT)
+            cmd = shlex.split(cmd) if isinstance(cmd, str) else cmd or CMD     # 测试文件的 CMD 写成字符串
+            os.execvpe(cmd[0], cmd, e)
         self.pid, self.fd = pid, fd
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
         self.alive = True
@@ -237,8 +239,9 @@ class Session:
 
 
 # ====================================================================== DSL
-UP, DOWN, LEFT, RIGHT = "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"
+UP, DOWN, RIGHT, LEFT = "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"   # CSI C = →, CSI D = ←
 BS, DEL, ESC, ENTER = "\x7f", "\x1b[3~", "\x1b", "\r"
+TAB, BTAB = "\t", "\x1b[Z"
 KEY_NAMES = {UP: "↑", DOWN: "↓", LEFT: "←", RIGHT: "→", BS: "退格", DEL: "DEL",
              ESC: "ESC", ENTER: "回车"}
 
@@ -383,6 +386,48 @@ def drag(c, text, dx, dy):
            f"拖 {text!r} ({dx},{dy})")
 
 
+def gone(c, pattern):
+    """Regex matches nothing on the screen."""
+    c.check(not c.frame.grep(pattern), f"屏上没有 /{pattern}/")
+
+
+def wait(c, secs):
+    """Send nothing, sleep `secs`, then take the current frame (for timers)."""
+    time.sleep(secs)
+    c.s.wait_stable(quiet=0.1, timeout=2.0)
+    c.frame = c.s.frame()
+    c.log.append(f"等 {secs}s")
+
+
+def bg_same(c, a, b, same=True):
+    """The first cell of `a` and of `b` have the same (or, same=False, a different) background."""
+    (xa, ya), (xb, yb) = _find(c, c.frame, a), _find(c, c.frame, b)
+    ba, bb = c.frame.cells[ya][xa][2], c.frame.cells[yb][xb][2]
+    c.check((ba == bb) == same, f"{a!r} 与 {b!r} 底色{'相同' if same else '不同'} ({ba}, {bb})")
+
+
+def bg_is(c, text, want):
+    """The first cell of `text` has background `want` (hex like 'e03030', or 'default')."""
+    x, y = _find(c, c.frame, text)
+    got = c.frame.cells[y][x][2]
+    c.check(got == want, f"{text!r} 底色 {want} ({got})")
+
+
+def flat(c, text, dx):
+    """Background of the cell `dx` from the start of `text` equals the next cell's (no fade)."""
+    x, y = _find(c, c.frame, text)
+    a, b = (c.frame.cells[y][x + dx + k][2] for k in (0, 1))
+    c.check(a == b, f"{text!r}{dx:+d} 的底色与右邻相同 ({a}, {b})")
+
+
+def darker(c, text, dx):
+    """Background of the cell `dx` from the start of `text` is darker than the next cell's (a faded button edge)."""
+    x, y = _find(c, c.frame, text)
+    lum = lambda bg: sum(int(bg[i:i + 2], 16) for i in (0, 2, 4)) if len(bg) == 6 else -1
+    a, b = (lum(c.frame.cells[y][x + dx + k][2]) for k in (0, 1))
+    c.check(0 <= a < b, f"{text!r}{dx:+d} 的底色比右邻更暗 ({a} < {b})")
+
+
 def click(c, text, dx, dy):
     """Click (dx, dy) away from `text`; then '、'."""
     x, y = _find(c, c.frame, text)
@@ -390,9 +435,66 @@ def click(c, text, dx, dy):
     c.send(c.s.press(x, y) + c.s.release(x, y), f"点击 {text!r}+({dx},{dy})")
 
 
-__all__ = ["UP", "DOWN", "LEFT", "RIGHT", "BS", "DEL", "ESC", "ENTER", "paste",
+# ---- 几个 v2 demo 测试共用的常量和检查 ----
+DEMO = "node v2/demo.js"                                  # 测试文件里: CMD = f"{DEMO} <场景> [参数...]"
+CHK_ON, CHK_OFF = "\U000f0132", "\U000f0131"              # md-checkbox-marked / -blank-outline
+RAD_ON, RAD_OFF = "\U000f043e", "\U000f043d"              # md-radiobox-marked / -blank
+
+
+def aligned(c, a, b):
+    """`a` and `b` start in the same column."""
+    xa, xb = _find(c, c.frame, a)[0], _find(c, c.frame, b)[0]
+    c.check(xa == xb, f"{a!r} 与 {b!r} 同列 ({xa}, {xb})")
+
+
+def corner(c, text, row):
+    """`text` sits in the right half of the top row (row = "top") or bottom row ("bottom") — a snack."""
+    x, y = _find(c, c.frame, text)
+    c.check(y == (ROWS - 1 if row == "bottom" else 0) and x > COLS // 2, f"{text!r} 在{row}行右半 ({x}, {y})")
+
+
+def centered(c, a, b):
+    """`a` and `b` have the same horizontal centre (±1 column): centred button labels in one grid column."""
+    (xa, _), (xb, _) = _find(c, c.frame, a), _find(c, c.frame, b)
+    ca, cb = xa + len(a) / 2, xb + len(b) / 2
+    c.check(abs(ca - cb) <= 1, f"{a!r} 与 {b!r} 居中对齐 ({ca}, {cb})")
+
+
+def below(c, a, b, n):
+    """`b` starts `n` rows below `a` (same column not required)."""
+    (_, ya), (_, yb) = _find(c, c.frame, a), _find(c, c.frame, b)
+    c.check(yb - ya == n, f"{b!r} 在 {a!r} 下方 {n} 行 ({yb - ya})")
+
+
+def upper_right(c, text):
+    """`text` is in the upper-right quadrant (a non-modal dialog)."""
+    x, y = _find(c, c.frame, text)
+    c.check(x > COLS // 2 and y < ROWS // 2, f"{text!r} 在右上象限 ({x}, {y})")
+
+
+def lower_right(c, text):
+    """`text` is in the lower-right quadrant."""
+    x, y = _find(c, c.frame, text)
+    c.check(x > COLS // 2 and y > ROWS // 2, f"{text!r} 在右下象限 ({x}, {y})")
+
+
+def left_of(c, text, x_max):
+    """`text` starts left of column `x_max`."""
+    x, y = _find(c, c.frame, text)
+    c.check(x < x_max, f"{text!r} 起于第 {x} 列 (< {x_max})")
+
+
+def bg_at(c, text, dx, want):
+    """The cell `dx` from the start of `text` has background `want` (hex like '7c100b')."""
+    x, y = _find(c, c.frame, text)
+    got = c.frame.cells[y][x + dx][2]
+    c.check(got == want, f"{text!r}{dx:+d} 的底色是 {want} ({got})")
+
+
+__all__ = ["UP", "DOWN", "LEFT", "RIGHT", "BS", "DEL", "ESC", "ENTER", "TAB", "BTAB", "paste", "COLS", "ROWS",
+           "DEMO", "CHK_ON", "CHK_OFF", "RAD_ON", "RAD_OFF",
            "opened", "grep", "only_fg", "chr_count", "back", "changed", "moved",
-           "drag", "click"]
+           "drag", "click", "gone", "wait", "darker", "bg_same", "bg_is", "flat", "aligned", "centered", "corner", "below", "upper_right", "lower_right", "left_of", "bg_at"]
 
 
 # =================================================================== runner
@@ -419,7 +521,7 @@ def run_file(path):
     spec.loader.exec_module(mod)
     tests = sorted((k, v) for k, v in vars(mod).items()
                    if re.fullmatch(r"_\d\d", k) and callable(v))
-    s = Session(os.path.join(OUT, f"{stem}.cast"))
+    s = Session(os.path.join(OUT, f"{stem}.cast"), cmd=getattr(mod, "CMD", None))
     s.first_paint = None
     end = time.monotonic() + 3
     while time.monotonic() < end:

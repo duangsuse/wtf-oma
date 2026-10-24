@@ -1,0 +1,121 @@
+<!doctype html>
+<!-- Omarchy Go… 菜单 · 浏览器版: xterm.js 当终端, 直接 import 同一份 menu.js (无图形进程, 选中高亮走字符背景色)
+     需要静态服务器(ES module / fetch 不支持 file://), 且 tree.json 在上一级:  仓库根目录 python3 -m http.server  然后打开 http://localhost:8000/v2/
+     URL 参数 = 命令行参数:  /?Learn/Arch   /?pop=stack&Trigger/Toggle
+     ?OMA_CMD=demo.js  换程序模块(同目录 *.js, default export boot({ tree, note, args, quit, hooks }) -> Session; 缺省 menu.js), 其余参数照旧传给它,
+     如 /v2/?OMA_CMD=demo.js&omarchy  /v2/?OMA_CMD=demo.js(无参 = 场景菜单 + inspect)。右上角 lil-gui 面板调颜色 / 尺寸 / 行为, 可复制成命令行参数。
+     Hook: window.menuHook = (kind, data) => {...}  kind = path | blur ; 同时派发 CustomEvent('menu:path'|'menu:blur') -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omarchy Go…</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+<style>
+  /* 图标: 优先用本机已装的 Nerd Font, 否则回落到 Symbols Nerd Font(只含图标, 叠在任意等宽字体上) */
+  @font-face {
+    font-family: "NF Symbols";
+    src: local("Symbols Nerd Font Mono"),
+         url("https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@v3.2.1/patched-fonts/NerdFontsSymbolsOnly/SymbolsNerdFontMono-Regular.ttf");
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #020b14; color: #6a8aa0; font: 13px ui-monospace, monospace; }
+  #t { position: absolute; inset: 0 255px 150px 0; overflow: hidden; }   /* 右边留给 lil-gui 面板(宽 245), 不然右上角的 snack 会被盖住; 不要给 #t 加 padding: FitAddon 不会扣掉父元素的 padding */
+  #t .xterm { padding: 8px; height: 100%; box-sizing: border-box; }
+  #log { position: absolute; left: 0; right: 0; bottom: 0; height: 150px; margin: 0; padding: 8px 12px; box-sizing: border-box;
+         overflow: auto; border-top: 1px solid #1a4d1a; white-space: pre-wrap; }
+  #log b { color: #1f8c1f; font-weight: normal; }
+</style>
+</head>
+<body>
+<div id="t"></div>
+<pre id="log"><b>hook log</b> — menu:path / menu:blur 事件会出现在这里
+</pre>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.8.0/lib/addon-unicode11.js"></script>
+<script type="module">
+  // ---- hook 点: 页面上任何代码都可以覆盖 window.menuHook, 或监听 menu:* 事件 ----
+  const log = document.getElementById("log");
+  window.menuHook = (kind, data) => window.dispatchEvent(new CustomEvent("menu:" + kind, { detail: data }));
+  // 异常也写到页面: 否则看起来就只是"终端没反应"
+  window.menuError = (where, msg) => {
+    log.insertAdjacentHTML("beforeend", `<b style="color:#e06c75">${where}</b> ${msg.replace(/</g, "&lt;")}\n`);
+    log.scrollTop = log.scrollHeight;
+  };
+  for (const k of ["path", "blur"])
+    addEventListener("menu:" + k, e => { log.insertAdjacentHTML("beforeend", `<b>${k}</b> ${e.detail}\n`); log.scrollTop = log.scrollHeight; });
+
+  // ---- 终端: 字体先加载好再量格子, 否则宽度算错 ----
+  const FONT = '"JetBrainsMono Nerd Font Mono", "NF Symbols", ui-monospace, "DejaVu Sans Mono", monospace';
+  await Promise.allSettled([document.fonts.load('14px "NF Symbols"', "󰀻")]);
+  const term = new Terminal({ fontFamily: FONT, fontSize: 15, allowProposedApi: true, cursorBlink: false,
+                              theme: { background: "#020b14", foreground: "#cfe8f5" } });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.loadAddon(new Unicode11Addon.Unicode11Addon());
+  term.unicode.activeVersion = "11";                   // emoji / CJK 宽度
+  term.open(document.getElementById("t"));
+  fit.fit(); term.focus();
+  addEventListener("resize", () => fit.fit());
+  document.getElementById("t").addEventListener("mousedown", () => term.focus());
+  window.term = term;
+
+  // ---- 程序模块: ?OMA_CMD=xxx.js(缺省 menu.js); 其余 URL 参数 = 命令行参数 ----
+  const menu = await import("./menu.js");
+  menu.io.size = () => [term.cols, term.rows];
+  menu.io.out = s => term.write(s);
+  const all = location.search.slice(1).split("&").filter(Boolean).map(decodeURIComponent);
+  const cmdArg = all.find(a => a.startsWith("OMA_CMD=")), cmd = cmdArg ? cmdArg.slice(8) : "menu.js", args = all.filter(a => a !== cmdArg);
+  if (!/^[\w.-]+\.js$/.test(cmd)) throw new Error("OMA_CMD 只能是同目录的 .js 文件名: " + cmd);
+  const boot = (await import("./" + cmd)).default;
+  const [tree, note] = await menu.loadTree(async () => {
+    const r = await fetch("../tree.json");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.text();
+  });
+  const onpath = s => window.menuHook("path", s);
+  const onblur = (x, y, open) => { window.menuHook("blur", x + "," + y); open(x, y); };   // 默认行为: 在点击处开新根菜单
+  const beh = { inspect: args.includes("inspect=1") };
+  let sess;
+  const reboot = () => { menu.io.out(menu.LEAVE); doBoot(); };       // Ctrl-C / 程序自己 quit: 终端复位后重新开始
+  const doBoot = () => { sess = boot({ tree, note, args, quit: reboot, hooks: { onpath, onblur } }); if (beh.inspect) sess.inspect = true; beh.inspect = sess.inspect; sess.render(); };
+  term.onData(d => {
+    try { if (sess.feed(d)) reboot(); } catch (e) { window.menuError("feed 失败", e.stack); }
+  });
+  term.onResize(() => sess?.render());
+  setInterval(() => { try { sess?.tick(); } catch (e) { window.menuError("tick 失败", e.stack); } }, 250);   // 对话框倒计时
+  try { doBoot(); } catch (e) { window.menuError("启动失败", e.stack); }
+
+  // ---- lil-gui: 把 THEME / CFG 暴露成面板, 改了立即重绘 ----
+  try {
+    const { default: GUI } = await import("https://cdn.jsdelivr.net/npm/lil-gui@0.20.0/dist/lil-gui.esm.min.js");
+    const gui = window.gui = new GUI({ title: "oma 调参" }), redraw = () => sess?.render();
+    const colors = menu.themeHex(), color0 = { ...colors }, cfg0 = { ...menu.CFG };
+    const fc = gui.addFolder("Theme colors");
+    for (const k of Object.keys(colors)) fc.addColor(colors, k).onChange(v => { menu.setTheme({ [k]: v }); redraw(); });
+    const g = menu.themeGlyph(), glyph = { checkOff: g.check[0], checkOn: g.check[1], radioOff: g.radio[0], radioOn: g.radio[1] };
+    const fg = gui.addFolder("Glyphs").close();
+    for (const k of Object.keys(glyph)) fg.add(glyph, k).onFinishChange(() => {
+      menu.setTheme({ glyph: { check: [glyph.checkOff, glyph.checkOn], radio: [glyph.radioOff, glyph.radioOn] } }); redraw();
+    });
+    const dims = (folder, list) => { for (const [k, lo, hi, step] of list) folder.add(menu.CFG, k, lo, hi, step).onChange(redraw); return folder; };
+    dims(gui.addFolder("Menu"), [["itemH", 1, 5, 1], ["menuMinW", 10, 80, 1], ["dragDelay", 0, 500, 10]]).close();   // 默认折叠
+    dims(gui.addFolder("Dialog (cells)"), [["btnH", 1, 9, 2], ["itemMinW", 1, 30, 1], ["gap", 0, 4, 1], ["dialogMinW", 10, 80, 1], ["fadeX", 0, 8, 1]]);   // btnH 步长 2: 只取奇数
+    gui.addFolder("Animation").add(menu.CFG, "dur", 0, 1000, 10).onChange(menu.setDur);        // gra.py 补间时长(ms); 渐隐列数 fadeX 在 Dialog 里, 渐隐颜色 fadeBg 在 Theme colors 里
+    dims(gui.addFolder("inlineKbd (cells)"), [["kbdRows", 1, 12, 1], ["kbdBottom", 0, 10, 1]]).close();
+    const fb = gui.addFolder("Behavior");
+    fb.add(menu.CFG, "pop", ["replace", "stack"]);
+    fb.add(menu.CFG, "rempos", ["", "rt", "rd", "lt", "ld"]);                                  // 窗口(同 id 没拖拽过)第一次出现的屏角; 空 = 各窗口自己的默认位置
+    fb.add(beh, "inspect").listen().onChange(v => { if (sess) { sess.inspect = v; redraw(); } });
+    gui.add({
+      "copy as CLI args"() {                                         // 只列改过的: color.<键>=#rrggbb cfg.<键>=值
+        const out = [...Object.keys(colors).filter(k => colors[k] !== color0[k]).map(k => `color.${k}=${colors[k]}`),
+                     ...Object.keys(cfg0).filter(k => menu.CFG[k] !== cfg0[k]).map(k => `cfg.${k}=${menu.CFG[k]}`)].join(" ");
+        navigator.clipboard?.writeText(out); window.menuHook("path", "args: " + (out || "(无改动)"));
+      },
+    }, "copy as CLI args");
+  } catch (e) { window.menuError("lil-gui 加载失败", e.stack); }
+</script>
+</body>
+</html>
