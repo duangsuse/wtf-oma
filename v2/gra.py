@@ -8,6 +8,10 @@
                reply <原始应答>
                draw <矩形...>  当前应显示的全部矩形; 新 key 创建, 变了就补间, 消失的 key 删除; 空 = 全清
                snap <矩形...>  同 draw 但不补间(拖拽中)
+               clipboarder <x>,<y> <窗口矩形...>
+                              有边框窗口的整格矩形(含边框, 带底色和 z); 只存下, 随下一条 draw/snap 生效, 直到下一条 clipboarder(空 = 清掉)。
+                              边框那一圈格子里只画线内侧那部分底色: '│' 的线在格宽 x 处、'─' 的线在格高 y 处(比例, 取整到像素),
+                              线外透出下面(字符背景 / 下层窗口), 消掉边框格整格底色与外面之间的亚字符断层。内部格子仍由 draw 画(或是字符背景)
                ease <linear(...)>
                dur <毫秒>      补间时长(不回应)
                cell           重新回报像素格尺寸(终端 resize / 字体缩放后)
@@ -196,11 +200,23 @@ def _place(iid, px, py, z, cw, ch, span=None):
     return "\x1b[%d;%dH\x1b_Ga=p,i=%d,p=1,X=%d,Y=%d,z=%d,C=1%s,q=2\x1b\\" % (
         py // ch + 1, px // cw + 1, iid, px % cw, py % ch, z, ",c=%d,r=%d" % span if span else "")
 
+frames, CLIPXY = {}, (0.5, 0.5)    # clipboarder: key -> (x, y, w, h, rgb, z) 整格窗口矩形 / 字符线在格内的位置
+
+def _strips(cw, ch):
+    """frames -> 边框四条带的矩形(格坐标, 已对齐到整像素), 形同 spec() 的值、不补间"""
+    a, b, res = round(CLIPXY[0] * cw) / cw, round(CLIPXY[1] * ch) / ch, {}
+    for k, (x, y, w, h, rgb, z) in frames.items():
+        for s, r in (("t", (x + a, y + b, w - 1, 1 - b)), ("b", (x + a, y + h - 1, w - 1, b)),       # 上下两条含四角
+                     ("l", (x + a, y + 1, 1 - a, h - 2)), ("r", (x + w - 1, y + 1, a, h - 2))):
+            if r[2] * cw >= 0.5 and r[3] * ch >= 0.5: res["%s:clip%s" % (k, s)] = (None, r, rgb, z, False)
+    return res
+
 def render(rects, snap):
     global _seq
     px = cell()
     if not (mode and px): return
     cw, ch = px
+    if frames: rects = {**rects, **_strips(cw, ch)}
     buf = ["\x1b_Ga=d,d=I,i=%d,q=2\x1b\\" % live.pop(k)[0] for k in [k for k in live if k not in rects]]
     for k, (x, y, w, h, *c) in tween(rects, snap).items():
         box = (round(x * cw), round(y * ch), max(1, round(w * cw)), max(1, round(h * ch)))
@@ -249,6 +265,15 @@ def draw(rest, snap=False):
 
 def snap(rest): draw(rest, True)
 
+def clipboarder(rest):
+    global frames, CLIPXY
+    xy, *fs = rest.split() or ["0.5,0.5"]
+    CLIPXY = tuple(float(v) for v in xy.split(","))
+    frames = {}
+    for i, s in enumerate(fs):
+        k, (_, (x, y, w, h), rgb, z, _) = spec(i, s)
+        frames[k] = (x, y, w, h, rgb, z)
+
 def ease(rest):
     global EASE
     pts = parse_linear(rest)
@@ -259,7 +284,7 @@ def dur(rest):
     global DUR
     DUR = float(rest) / 1000
 
-CMD = {f.__name__.rstrip("_"): f for f in (probe, reply, draw, snap, ease, dur, cell_)}
+CMD = {f.__name__.rstrip("_"): f for f in (probe, reply, draw, snap, clipboarder, ease, dur, cell_)}
 
 def tick():
     before = set(moving)

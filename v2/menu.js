@@ -13,6 +13,9 @@
 export const CFG = {
   itemH: 3, dragDelay: 10,                       // 菜单项高度(只管菜单; 对话框按钮用 btnH) / 按下后停留多久才算拖拽(ms)
   menuMinW: 32, dialogMinW: 20,                   // 窗口最小宽度
+  padMenu: [4, 1],                                // 菜单窗口的 横, 纵 边距: 边框到文字的空列 / 空行数(标题行之上, 最后一项文字之下); 选中底色横向贴边框
+  clickSlop: 1, slopSpeed: 30,                    // 对话框点击容错: 没点中按钮时, 离按钮 clickSlop 格内也算; 同时够到几个(有歧义)时只在鼠标速度 > slopSpeed(格宽/秒, 纵向按格高宽比折算) 时取运动方向前方的那个
+  clipBGlyph: [0.5, 0.5],                         // 边框字符('─' '│' 等)里窗口底色与外面的分界: [x, y] = '│' 线在格内的横向位置 / '─' 线的纵向位置(格宽 / 格高的比例); null = 按整格(gra.py 生效时才有用)
   btnH: 1, itemMinW: 8, gap: 1, fadeX: 2,         // 对话框按钮: 高度(行, 必须是奇数: 文字落在正中那行) / 最小宽度 / 间距(横向纵向都有效) / 底色两端渐隐列数(opts.fadeX 缺省值)
   dur: 180,                                       // gra.py 补间时长(ms)
   kbdRows: 5, kbdBottom: 3,                       // inlineKbd: 最多显示几行(窄高度) / 窗口底边离屏底几行(留给输入框)
@@ -131,11 +134,12 @@ function matches(node, q) {
   walk(node, []);
   return out.sort((a, b) => a.length - b.length);
 }
-const maxVis = () => Math.max(3, Math.floor((io.size()[1] - 7) / CFG.itemH));
-const height = n => 5 + Math.max(Math.min(n, maxVis()), 1) * CFG.itemH;
-const rowY = pos => 4 + pos * CFG.itemH;                                             // 第 pos 个可见项在窗口内的 y
+const [padX, padY] = [() => CFG.padMenu[0], () => CFG.padMenu[1]];
+const maxVis = () => Math.max(3, Math.floor((io.size()[1] - 5 - 2 * padY()) / CFG.itemH));
+const rowY = pos => padY() + 3 + pos * CFG.itemH;                                    // 第 pos 个可见项在窗口内的 y(标题行下空一行)
+const height = n => rowY(Math.max(Math.min(n, maxVis()), 1)) + Math.max(0, padY() - (CFG.itemH - 1 - (CFG.itemH >> 1))) + 1;   // 项底色自带文字下方的行, 不够 padY 才补
 const itemLabel = k => (k.icon ? k.icon + "  " : "") + k.name;
-const menuW = node => Math.max(CFG.menuMinW, Math.max(0, ...node.kids.map(k => cw(itemLabel(k)))) + 9);
+const menuW = node => Math.max(CFG.menuMinW, Math.max(0, ...node.kids.map(k => cw(itemLabel(k)))) + 5 + 2 * padX());   // 边框 2 + 右侧 '›' 区 3
 
 /** 'Learn/Arch' -> [kid 下标...]; 名字自带 '/' 时回溯匹配, 忽略大小写; 失败 null */
 function resolve(node, s) {
@@ -203,21 +207,22 @@ class Menu extends Win {
     if (n >= 0) this.top = Math.min(Math.max(this.top, n - vis + 1), n);
     this.top = Math.max(0, Math.min(this.top, idx.length - vis));
     this.h = height(idx.length);
+    const px = padX(), py = padY(), L = 1 + px, R = W - 1 - px;   // 文字区 [L, R)
     const bs = [box(0, 0, W, this.h, { id: "win", bg: THEME.bg, border: THEME.border }),
-                box(1, 1, W - 2, 3, { id: "title" }),
-                box(3, 2, W - 6, 1, { text: q ? q + "▏" : this.node.name + "…", fg: q ? THEME.text : THEME.dim })];
-    if (this.top > 0) bs.push(box(W - 6, 2, 1, 1, { text: "▲", fg: THEME.dim }));
-    if (this.top + vis < idx.length) bs.push(box(W - 4, 2, 1, 1, { text: "▼", fg: THEME.dim }));
-    if (!idx.length) bs.push(box(3, 5, W - 6, 1, { text: "No matches", fg: THEME.dim }));
+                box(1, 1, W - 2, py + 2, { id: "title" }),
+                box(L, py + 1, R - L, 1, { text: q ? q + "▏" : this.node.name + "…", fg: q ? THEME.text : THEME.dim })];
+    if (this.top > 0) bs.push(box(R - 3, py + 1, 1, 1, { text: "▲", fg: THEME.dim }));
+    if (this.top + vis < idx.length) bs.push(box(R - 1, py + 1, 1, 1, { text: "▼", fg: THEME.dim }));
+    if (!idx.length) bs.push(box(L, rowY(0) + 1, R - L, 1, { text: "No matches", fg: THEME.dim }));
     idx.slice(this.top, this.top + vis).forEach((ip, pos) => {
       const k = at(this.node, ip), y = rowY(pos), ty = y + (CFG.itemH >> 1), on = same(ip, this.sel), label = itemLabel(k);
       bs.push(box(1, y, W - 2, CFG.itemH, { id: "item:" + ip.join("."), ip, bg: on ? THEME.selBg : THEME.bg, anim: on }));
-      bs.push(box(3, ty, W - 8, 1, { text: label, fg: THEME.text, lit: hl(on) }));   // 选中行文字: 遮罩到位后才点亮(focusHL = '' 且有 gra.py 时不点亮)
+      bs.push(box(L, ty, R - L - 2, 1, { text: label, fg: THEME.text, lit: hl(on) }));   // 选中行文字: 遮罩到位后才点亮(focusHL = '' 且有 gra.py 时不点亮)
       if (ip.length > 1) {                                       // 深搜结果: 名字后淡色显示所在路径
-        const tx = 3 + cw(label) + 2;
-        bs.push(box(tx, ty, W - 6 - tx, 1, { text: "‹ " + trail(this.node, ip).join("/"), fg: THEME.dim }));
+        const tx = L + cw(label) + 2;
+        bs.push(box(tx, ty, R - 3 - tx, 1, { text: "‹ " + trail(this.node, ip).join("/"), fg: THEME.dim }));
       }
-      if (k.kids.length) bs.push(box(W - 5, ty, 1, 1, { text: "›", fg: THEME.dim, lit: hl(on) }));
+      if (k.kids.length) bs.push(box(R - 2, ty, 1, 1, { text: "›", fg: THEME.dim, lit: hl(on) }));
     });
     return bs;
   }
@@ -561,6 +566,7 @@ const showCmd = s => { STATUS = ["node", SELF, ...(CFG.pop === "stack" ? ["pop=s
 // ---------- 布局 / 路由 ----------
 const layout = wins => wins.flatMap(w => w.view().map(b => ({ ...b, x: b.x + w.x, y: b.y + w.y, win: w.name })));
 const route = (boxes, x, y) => boxes.findLast(b => b.id && b.x <= x && x < b.x + b.w && b.y <= y && y < b.y + b.h);
+const near = (b, x, y, s = CFG.clickSlop) => b.x - s <= x && x < b.x + b.w + s && b.y - s <= y && y < b.y + b.h + s;   // (x, y) 在 b 外扩 s 格之内
 
 /** boxes[i] 是否被更上层窗口的不透明 Box 压住(遮罩只能盖在字符背景之上, 压住就退回字符背景) */
 const covered = (boxes, i) => {
@@ -601,43 +607,52 @@ const lines = dict => {
 
 const hex = c => c.map(v => v.toString(16).padStart(2, "0")).join("");
 
-/** 要交给 gra.py 的矩形: 动画 Box(遮罩, 补间) + layer Box + 静态底色(仅 layered 终端需要)。keys: Box 下标 -> gra key */
+/** 要交给 gra.py 的矩形: 动画 Box(遮罩, 补间) + layer Box + 静态底色(仅 layered 终端需要)。keys: Box 下标 -> gra key
+ *  有边框的窗口底色(CFG.clipBGlyph 非 null)另交 clipboarder: 边框那一圈格子由 gra.py 按字符线的位置剪裁, 线外透出下面, 线内是窗口底色;
+ *  clipped = 这些 Box 的下标(paint 不给它们的边框格画字符背景色)。shm 下图像压在所有字符背景之上, 被上层窗口压住的就不剪 */
 function rects(boxes) {
-  const lay = gfx.mode === "direct", keys = new Map(), specs = [];
+  const lay = gfx.mode === "direct", keys = new Map(), specs = [], frames = [], clipped = new Set(), cg = CFG.clipBGlyph;
   boxes.forEach((b, i) => {
+    const clip = !!cg && b.border && b.bg && !b.anim && b.w > 2 && b.h > 2 && (lay || !covered(boxes, i));
+    if (clip) { clipped.add(i); frames.push(`${b.win}=${b.x},${b.y},${b.w},${b.h}#${hex(b.bg)}@${i}`); }
     if (!b.bg || !(b.anim || b.layer || lay) || (b.anim && covered(boxes, i))) return;
     const k = b.anim === true ? b.win : b.anim ? b.win + ":" + b.anim : "bg" + i;   // 焦点遮罩以窗口名为键, 其它补间遮罩 窗口名:名字
     keys.set(i, k);
-    specs.push(`${k}=${b.anim ? "->" : ""}${[b.x, b.y, b.w, b.h].map(v => +v.toFixed(4))}#${hex(b.bg)}@${i}`);
+    const r = clip ? [b.x + 1, b.y + 1, b.w - 2, b.h - 2] : [b.x, b.y, b.w, b.h];   // 剪裁的窗口: 边框格交给 clipboarder
+    specs.push(`${k}=${b.anim ? "->" : ""}${r.map(v => +v.toFixed(4))}#${hex(b.bg)}@${i}`);
   });
-  return { keys, specs };
+  return { keys, specs, clipped, frames: frames.length ? cg.join(",") + " " + frames.join(" ") : "" };
 }
 
 // ---------- 绘制: 有图形进程时先发矩形, 等它回 state(补间状态)再画文字帧 ----------
-let CUR = null;               // 最近一次 show 的 { boxes, keys }
+let CUR = null;               // 最近一次 show 的 { boxes, keys, clipped }
+let FRAMES_SENT = "";         // 最近一次发给 gra.py 的 clipboarder 参数, 没变就不重发
 
 function show(boxes, snap) {
-  CUR = { boxes, keys: new Map() };
+  CUR = { boxes, keys: new Map(), clipped: new Set() };
   if (!gfx.on()) return paint();
   const r = rects(boxes);
-  CUR.keys = r.keys;
+  CUR.keys = r.keys; CUR.clipped = r.clipped;
+  if (r.frames !== FRAMES_SENT) gfx.send("clipboarder " + (FRAMES_SENT = r.frames));   // 先于 draw: 随这次 draw 一起生效
   gfx.send((snap ? "snap " : "draw ") + r.specs.join(" "));
 }
 
 const sgr = (fg, bg) => "\x1b[0m" + (fg ? `\x1b[38;2;${fg.join(";")}m` : "") + (bg ? `\x1b[48;2;${bg.join(";")}m` : "");
 
 function paint() {
-  const FRAME = [...THEME.frame], { boxes, keys } = CUR, [cols, rows] = io.size(), lay = gfx.mode === "direct", imaged = new Set(keys.keys());
+  const FRAME = [...THEME.frame], { boxes, keys, clipped } = CUR, [cols, rows] = io.size(), lay = gfx.mode === "direct", imaged = new Set(keys.keys());
   const g = Array.from({ length: rows }, () => Array.from({ length: cols }, () => [" ", null, null]));   // [字, fg, bg]
   const cell = (x, y) => g[y]?.[x];
   boxes.forEach((b, i) => {
     for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) {
       const c = cell(x, y);
       if (!c) continue;
-      if (b.bg) { if (!imaged.has(i)) { c[0] = " "; c[2] = b.fade ? fadeBg(b, x) : b.bg; } else if (lay) { c[0] = " "; c[2] = null; } }
+      const top = y === b.y, bot = y === b.y + b.h - 1, left = x === b.x, right = x === b.x + b.w - 1, edge = top || bot || left || right;
+      if (b.bg && !(edge && clipped.has(i))) {                   // 剪裁的边框格: 字符背景留给下面(线内的底色由 clipboarder 画)
+        if (!imaged.has(i)) { c[0] = " "; c[2] = b.fade ? fadeBg(b, x) : b.bg; } else if (lay) { c[0] = " "; c[2] = null; }
+      }
       if (b.border) {
-        const top = y === b.y, bot = y === b.y + b.h - 1, left = x === b.x, right = x === b.x + b.w - 1;
-        if (!(top || bot || left || right)) continue;
+        if (!edge) continue;
         c[0] = FRAME[(top ? 0 : bot ? 6 : 3) + (left ? 0 : right ? 2 : 1)];
         c[1] = b.border;
       }
@@ -733,7 +748,7 @@ function popMode(args) {                                         // 没指定返
 /** 窗口栈(末尾=最上层/焦点) + 拖拽/按下状态; feed() 把输入记号翻译成窗口事件 */
 class Session {
   constructor(tree, onblur, quit, persist = false) {
-    Object.assign(this, { tree, onblur, quit, persist, wins: [], drag: null, press: null, dirty: false, chains: new Map(), snacks: {},
+    Object.assign(this, { tree, onblur, quit, persist, wins: [], drag: null, press: null, dirty: false, chains: new Map(), snacks: {}, trail: [],
                           wire: { press() {}, active() {} },   // wire: 渲染 -> 宿主 的回报(press / active), 由宿主(pi.js)接上
                           arg: { focusHL: "color" },           // arg: 即 pi.arg; focusHL = 'color' | '#rrggbb' | '' (按钮文字的强调色; '' 只在 gra.py 生效时才能关, 动效不受影响)
                           inspect: false, wlog: [] });         // inspect: 屏底滚动显示宿主 <-> 渲染 的线上消息
@@ -845,10 +860,36 @@ class Session {
     return [w, "hover", hit];
   }
 
-  release(x, y) {                                                // 项上的按下: 原地松开才是点击
-    const { w, hit: h0 } = this.press, hit = route(layout(this.wins), x, y);
+  release(x, y) {                                                // 项上的按下: 原地松开才是点击(容错吸附的按下: 松开在同一容错范围内也算)
+    const { w, hit: h0, slop } = this.press, hit = route(layout(this.wins), x, y);
     this.press = null;
-    if (this.wins.includes(w) && hit?.id === h0.id && hit.win === w.name) return [w, "click", h0];
+    if (this.wins.includes(w) && (hit?.id === h0.id && hit.win === w.name || slop && near(h0, x, y))) return [w, "click", h0];
+  }
+
+  /** 鼠标轨迹(含悬停移动), 只留最近 ~120ms, 用来估计点击那一刻的速度 */
+  track(x, y) {
+    const t = Date.now();
+    this.trail.push([x, y, t]);
+    while (this.trail.length > 2 && t - this.trail[0][2] > 120) this.trail.shift();
+  }
+
+  /** 当前鼠标速度 [vx, vy](格宽/秒, 纵向已按格高宽比折算); 停下超过 60ms 算 0 */
+  velocity() {
+    const tr = this.trail, a = tr[0], b = tr.at(-1), now = Date.now();
+    const moved = tr.findLast(p => p[0] !== b[0] || p[1] !== b[1]);   // 最后一次真正移动(按下事件与之前的悬停同一格)
+    if (!a || a === b || !moved || now - moved[2] > 60) return [0, 0];
+    const dt = Math.max(16, b[2] - a[2]) / 1000, asp = gfx.cell ? gfx.cell[1] / gfx.cell[0] : 2;
+    return [(b[0] - a[0]) / dt, (b[1] - a[1]) * asp / dt];
+  }
+
+  /** 对话框里没点中按钮: 取 clickSlop 格内的按钮; 同时够到几个时, 鼠标够快才取运动方向前方的那个(冲过头的点击多半还没到), 慢 = 像在拖选, 不猜 */
+  snapBtn(boxes, w, x, y) {
+    const cand = boxes.filter(b => b.win === w.name && b.ip && near(b, x, y));
+    if (cand.length < 2) return cand[0];
+    const [vx, vy] = this.velocity(), asp = gfx.cell ? gfx.cell[1] / gfx.cell[0] : 2;
+    if (Math.hypot(vx, vy) < CFG.slopSpeed) return;
+    const ahead = b => (b.x + b.w / 2 - x - 0.5) * vx + (b.y + b.h / 2 - y - 0.5) * asp * vy;   // 按钮中心相对点击格中心, 在速度方向上的投影
+    return cand.reduce((a, b) => ahead(b) > ahead(a) ? b : a);
   }
 
   /** 点在所有窗口之外: 最上层是对话框 / 下拉列表 -> 同 Esc(宿主得 null; 非模态 toast 不关); 是 menuOpen 开的菜单 -> 整串关掉(得 null);
@@ -862,11 +903,13 @@ class Session {
 
   /** b=按钮码, kind='M' 按下/移动 | 'm' 松开。返回要派发的 [窗口, 事件, 参数] 或 undefined */
   mouse(b, x, y, kind) {
+    if (!(b & 64)) this.track(x, y);
     if (this.press && b === 32 && !this.startDrag(x, y)) return;
     if (this.drag) return this.dragTo(b, x, y);
     if (this.press && kind === "m" && b === 0) return this.release(x, y);
     this.press = null;
-    const hit = route(layout(this.wins), x, y);
+    const boxes = layout(this.wins);
+    let hit = route(boxes, x, y);
     if (!hit) {
       if (b === 0 && kind === "M") { this.blur(x, y); this.dirty = true; }
       return;
@@ -874,7 +917,12 @@ class Session {
     const w = this.wins.find(w => w.name === hit.win), top = this.wins.at(-1);
     if (top instanceof Kbd && w !== top) { if (b === 0 && kind === "M") { this.blur(x, y); this.dirty = true; } return; }   // 下拉列表开着: 点别处 = Esc, 悬停 / 滚轮不给下面的窗口
     if (b & 64) return [w, "key", b === 64 ? "up" : "down"];
-    if (b === 0 && kind === "M") return this.pressDown(w, hit, x, y);
+    if (b === 0 && kind === "M") {
+      const s = w instanceof Dialog && hit.id === "win" && this.snapBtn(boxes, w, x, y);   // 点击容错
+      const r = this.pressDown(w, s || hit, x, y);
+      if (s && this.press) this.press.slop = true;
+      return r;
+    }
     if (b === 35 && hit.ip && !same(w.sel, hit.ip)) return [w, "hover", hit];
   }
 
@@ -903,7 +951,10 @@ export function start(sexp, o = {}) {
   const args = o.args ?? [];
   const pairs = re => args.flatMap(a => { const m = re.exec(a); return m ? [[m[1], m[2]]] : []; });
   CFG.pop = popMode(args) ?? CFG.pop; if (o.rempos) CFG.rempos = o.rempos;
-  for (const [k, v] of pairs(/^cfg\.(\w+)=(.+)$/)) { if (!(k in CFG)) throw new Error("unknown cfg key: " + k); CFG[k] = typeof CFG[k] === "number" ? Number(v) : v; }
+  for (const [k, v] of pairs(/^cfg\.(\w+)=(.+)$/)) {             // 数组键写成 cfg.padMenu=3,1; cfg.clipBGlyph=none 关掉
+    if (!(k in CFG)) throw new Error("unknown cfg key: " + k);
+    CFG[k] = typeof CFG[k] === "number" ? Number(v) : Array.isArray(CFG[k]) ? (v === "none" ? null : v.split(",").map(Number)) : v;
+  }
   if (CFG.btnH % 2 === 0) throw new Error("cfg.btnH 必须是奇数: " + CFG.btnH);
   ONPATH = o.onpath ?? showCmd; LAST = null; STATUS = o.status ?? "";
   setTheme({ ...Object.fromEntries(pairs(/^color\.(\w+)=(.+)$/)), ...o.theme });   // color.preset=pink color.frame=round 同样可用
