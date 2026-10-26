@@ -21,8 +21,8 @@ def _02(c):
 
 
 def _03(c):
-    """Batch: c1({ n, body }) 批量写, 合成一条 patch(body 和依赖 n 的三个标签一起变)"""
-    c - [RIGHT, ENTER, grep, "patches=1 keys=body,Same,Bounce,Batch", grep, "batched", grep, "Batch n=1", grep, "Same n=1"]
+    """Batch: c1({ n, body }) 批量写, 合成一条 patch; update 默认 oldnew: State 变化只重新渲染上一个焦点(Bounce)和当前焦点(Batch), Same 不变"""
+    c - [RIGHT, ENTER, grep, "patches=1 keys=body,Bounce,Batch", grep, "batched", grep, "Batch n=1", grep, "Same n=0"]
 
 
 def _04(c):

@@ -100,7 +100,7 @@
       menu.setTheme({ glyph: { check: [glyph.checkOff, glyph.checkOn], radio: [glyph.radioOff, glyph.radioOn] } }); redraw();
     });
     const dims = (folder, list) => { for (const [k, lo, hi, step] of list) folder.add(menu.CFG, k, lo, hi, step).onChange(redraw); return folder; };
-    dims(gui.addFolder("Menu"), [["itemH", 1, 5, 1], ["menuMinW", 10, 80, 1], ["dragDelay", 0, 500, 10]]).close();   // 默认折叠
+    dims(gui.addFolder("Menu"), [["itemH", 1, 5, 1], ["menuMinW", 10, 80, 1], ["dragDelay", 0, 50, 10]]).close();   // 默认折叠
     dims(gui.addFolder("Dialog (cells)"), [["btnH", 1, 9, 2], ["itemMinW", 1, 30, 1], ["gap", 0, 4, 1], ["dialogMinW", 10, 80, 1], ["fadeX", 0, 8, 1]]);   // btnH 步长 2: 只取奇数
     gui.addFolder("Animation").add(menu.CFG, "dur", 0, 1000, 10).onChange(menu.setDur);        // gra.py 补间时长(ms); 渐隐列数 fadeX 在 Dialog 里, 渐隐颜色 fadeBg 在 Theme colors 里
     dims(gui.addFolder("inlineKbd (cells)"), [["kbdRows", 1, 12, 1], ["kbdBottom", 0, 10, 1]]).close();

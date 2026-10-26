@@ -6,8 +6,8 @@
   →      play this test point's cast at 0.3x, return automatically
   ↑/↓    switch view: first frame / last frame / diff
          (diff: green bg = changed/new cell of last frame, red bg = cell blanked)
-  0-9    jump to test _0N
-  Enter  re-run the test suite
+  0-9    jump within the menu list by window row (5 = centre, 3 above, 7 below); target re-centres
+  Enter  re-run the current test file only
   Q      quit
 """
 import os, shutil, subprocess, sys, termios, tty
@@ -24,7 +24,7 @@ KEYS = {"\x1b[A": "up", "\x1bOA": "up", "\x1b[B": "down", "\x1bOB": "down",
         "\r": "enter", "\n": "enter", "\x1b": "esc", "q": "quit", "Q": "quit",
         "\x03": "quit"}
 MENU_W = 46
-MENU_TOP, MENU_ROWS = 14, 10      # 菜单画在下半屏(第 14 行起: 标题 + 10 个可见项 + 错误行), 上半屏的预览不被盖住
+MENU_TOP, MENU_ROWS = 28, 11      # 菜单画在提示行(第 27 行)之下: 标题 + 11 个可见项(奇数, 当前项可居中) + 错误行
 
 GREEN, RED, DIM, REV, RST = "\x1b[32m", "\x1b[31m", "\x1b[2m", "\x1b[7m", "\x1b[0m"
 
@@ -46,7 +46,7 @@ def cut(s, n):
 
 class Viewer:
     def __init__(self):
-        self.i, self.mode, self.menu = 0, 2, False
+        self.i, self.mode, self.menu, self.top = 0, 2, False, 0
         self.load()
 
     def load(self):
@@ -94,13 +94,13 @@ class Viewer:
 
     def draw_menu(self):
         n = len(self.tests)
-        top = min(max(getattr(self, "top", 0), self.i - MENU_ROWS + 1), self.i)     # 当前项保持在可见窗口内
-        self.top = max(0, min(top, n - MENU_ROWS))
+        if not self.top <= self.i < self.top + MENU_ROWS:                           # 当前项出了窗口才最小滚动
+            self.top = max(0, min(self.i if self.i < self.top else self.i - MENU_ROWS + 1, n - MENU_ROWS))
         head = f" 测试点 {self.i + 1}/{n}  ↑↓/数字选择  →/Enter/←收起"
         w(f"\x1b[{MENU_TOP};1H{REV}{cut(head, MENU_W)}{RST}")
         for r in range(MENU_ROWS):
             k, row = self.top + r, MENU_TOP + 1 + r
-            if k >= n:
+            if not 0 <= k < n:
                 w(f"\x1b[{row};1H{' ' * MENU_W}")
                 continue
             t = self.tests[k]
@@ -113,12 +113,16 @@ class Viewer:
 
     # ------------------------------------------------------------ actions
     def rerun(self):
+        # 只重跑当前测试点所在的文件, 其余结果保留
+        stem = self.tests[self.i]["id"][:-3] if self.tests else None
+        cur = self.tests[self.i]["id"] if self.tests else None
         self.restore()
         w("\x1b[2J\x1b[H运行测试...\n")
         sys.stdout.flush()
-        subprocess.run(RUN)
+        subprocess.run(RUN + ([os.path.join(HERE, stem + ".py")] if stem else []))
         input("\n按 Enter 返回")
         self.load()
+        self.i = next((k for k, t in enumerate(self.tests) if t["id"] == cur), self.i)
         self.raw()
 
     def play(self):
@@ -131,8 +135,9 @@ class Viewer:
         self.raw()
 
     def jump(self, digit):
-        want = self.tests[self.i]["id"][:-3] + "_0" + digit
-        self.i = next((k for k, t in enumerate(self.tests) if t["id"] == want), self.i)
+        # 数字 = 菜单窗口中的行位置 (5 = 正中心): 选中该行的项, 再把它滚到中心, 便于连续按键
+        self.i = max(0, min(self.i + int(digit) - MENU_ROWS // 2, len(self.tests) - 1))
+        self.top = self.i - MENU_ROWS // 2          # 可越界, 越界行留空
 
     def key(self, k):
         n = len(self.tests)

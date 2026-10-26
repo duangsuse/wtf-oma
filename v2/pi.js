@@ -8,11 +8,20 @@
 // 用法:
 //   const sess = start(tree, { persist: true, root: false }), pi = createPi(sess)
 //   const [c, c1] = pi.onEmit({ title: 'T', body: '', footer: '', web: 0 })
-//   const r = await pi.dialog({ init: [c, c1] }, { OK() {}, web: up => (up && c1.web(c.web ^ 1), c.web ? '[x] web' : '[ ] web') })
+//   const r = await pi.dialog({ init: c }, { OK() {}, web: up => (up && c1.web(c.web ^ 1), c.web ? '[x] web' : '[ ] web') })
+//
+// 按钮标签的渲染语法(都只是画法, 宿主侧没有别的 API; 识别在 menu.js mark()):
+//   '[x] a' '( ) a' '(*) a' '○ a' '● a'   开头: 勾选 / 单选图标         'a [x]' 'a [ ]'  结尾: 开关(滑块, gra.py 补间)
+//   'a ▼'                                 下拉框; 用 dialog 的 drop: { key: items } 声明时 ' ▼' 自动追加, 按下即弹出列表
+//   '[...]'                               spacer: 不可见、不可聚焦, 平分该行剩余宽度(该行撑满对话框)
+//   eachRow 里的负数 -n                   n 个按钮的分段组: 撑满对话框、平分宽度、无间隔; '●' 的那段是选中段(图标不画); 键盘移到哪段就按下哪段
+// 点在所有窗口之外 = Esc: dialog / 下拉列表 resolve null(非模态 toast 除外), omarchy.menu resolve null
 //   const path = await pi.omarchy.menu([], pi.if404(k => console.log('no handler', k), { 'Learn/Arch': () => {} }))
 
 let LOG = (...a) => console.error(...a);
-const timers = new WeakMap();                     // State -> Set<取消函数>
+const timers = new WeakMap();
+const RADIO = /^(\(([ *•xX])\)|[○◯●◉])\s/;            // 单选语法: oldnew 模式下 State 变化时这些按钮也重新渲染(兄弟按钮要跟着换点)
+const SPACER = "[...]", DROP = /\s+[▼▾]$/;                     // State -> Set<取消函数>
 
 /** 状态: 返回 [c, c1]。c.x 读, c1.x(v) / c1({ x, y }) 写; 写入合并到当前 microtask 末尾, 之后 c.onUpd(kv) 收到值有变化的键(字符串, null = 撤下) */
 export function onEmit(initial = {}) {
@@ -64,14 +73,22 @@ export function createPi(sess, { log } = {}) {
   sess.wire.press = (id, key) => dialogs.get(id)?.press(key);
   sess.wire.active = (id, key) => dialogs.get(id)?.active(key);
 
-  /** resolve 为按下的按钮键名; Esc 为 null。返回的 Promise 同时是句柄: ret(value) 在任何地方关闭并 resolve 为 value */
+  /** d.init 是 onEmit 的 c(dialog 只监听它的变化, 写入在宿主手里), 或不会变的 { title, body, footer }。resolve 为按下的按钮键名; Esc 为 null。
+   *  返回的 Promise 同时是句柄: ret(value) 在任何地方关闭并 resolve 为 value; drop(key, items) 在按钮 key 正下方弹出下拉列表
+   *  update: 'oldnew'(默认) 焦点移动和 State 变化都只重新渲染上一个焦点、当前焦点(及单选语法的按钮); 'full' 全部重新渲染
+   *  drop: { key: items | () => items }: 这些按钮是下拉框, 标签自动追加 ' ▼'; 按下时在它下面弹出列表(焦点移过去),
+   *        选中后调用按钮 bs[key](选中项)(渲染时仍是 bs[key](false)), Esc / 点别处什么都不做 */
   function dialog(d = {}, bs = {}) {
-    const [c, c1] = d.init ?? onEmit({}), id = ++seq, keys = Object.keys(bs), labels = {}, sent = {};
-    let closed = false, busy = false, prev = d.or ?? null, resolve;
+    const c = d.init && "onUpd" in d.init ? d.init : onEmit(d.init ?? {})[0], id = ++seq, keys = Object.keys(bs), labels = {}, sent = {};
+    let closed = false, busy = false, last = null, cur = null, resolve;
     const promise = new Promise(r => { resolve = r; });
     const text = k => c[k] == null ? "" : String(c[k]);
     const now = () => ({ title: text("title"), body: text("body"), footer: text("footer"), ...labels });
-    const label = (k, r) => typeof r === "string" ? r : k;              // null / undefined / void -> 键名
+    const drops = d.drop ?? {};
+    const label = (k, r) => {                                           // null / undefined / void -> 键名; 下拉框追加 ' ▼'
+      const t = typeof r === "string" ? r : k;
+      return Object.hasOwn(drops, k) ? t.replace(DROP, "") + " ▼" : t;
+    };
 
     const sync = () => {                          // 只发和上次不同的键
       if (closed) return;
@@ -98,40 +115,50 @@ export function createPi(sess, { log } = {}) {
       sess.dialogClose(id);
       resolve(v);
     };
-    const upd = () => { render(keys); sync(); };                        // State 变化: 重算全部按钮再 diff
+    const dirty = () => d.update === "full" ? keys
+      : keys.filter(k => k === last || k === cur || RADIO.test(labels[k] ?? ""));
+    const upd = () => { render(dirty()); sync(); };                     // State 变化: 重算(部分)按钮再 diff
 
     dialogs.set(id, {
       active(key) {                               // update: 'full' 刷新全部按钮, 默认 'oldnew' 只刷新上一个和新的
-        const ks = d.update === "full" ? keys : [...new Set([prev, key])].filter(k => k != null && k in bs);
-        prev = key;
-        render(ks); sync();
+        last = cur; cur = key;
+        render(d.update === "full" ? keys : [...new Set([last, cur])].filter(k => k != null && k in bs)); sync();
       },
       async press(key) {
         if (closed) return;
         if (key == null) return close(null);
         if (busy || !(key in bs)) return;                                // Promise 等待期间不响应第二次按下
         let r;
+        busy = true;
         try {
-          r = bs[key](true);
-          if (r?.then) { busy = true; try { r = await r; } finally { busy = false; } }
+          if (Object.hasOwn(drops, key)) {                              // 下拉框: 先选, 再把选中项交给按钮
+            const items = typeof drops[key] === "function" ? drops[key]() : drops[key];
+            const v = await inlineKbd(await items, { below: [id, key] });
+            if (v == null || closed) return;
+            r = bs[key](v);
+          } else r = bs[key](true);
+          if (r?.then) r = await r;
         } catch (e) { LOG("dialog button threw", e); return; }
+        finally { busy = false; }
         if (closed) return;
-        if (typeof r === "string") { labels[key] = r; queueMicrotask(sync); } else close(key);   // 排在本事务 flush 之后: 同一事务只发一条 patch
+        if (typeof r === "string") { labels[key] = label(key, r); queueMicrotask(sync); } else close(key);   // 排在本事务 flush 之后: 同一事务只发一条 patch
       },
     });
     render(keys);
+    cur = d.or ?? keys.find(k => labels[k] !== SPACER) ?? null;          // 渲染侧的初始焦点同样跳过 spacer
     Object.assign(sent, now());
     c.onUpd = upd;
     sess.dialogOpen(id, { ...sent }, { timeout: d.timeout, or: d.or, eachRow: d.eachRow, fadeX: d.fadeX });
-    return Object.assign(promise, { ret: v => close(v ?? null) });
+    return Object.assign(promise, { ret: v => close(v ?? null), drop: (key, items) => inlineKbd(items, { below: [id, key] }) });
   }
 
-  /** 输入框上方的窄下拉(fzf 式 Tab 补齐, 行数见 CFG.kbdRows): 打字过滤, ↑/↓/Tab 选择, Enter 确认; resolve 为选中项, Esc 为 null */
-  function inlineKbd(items) {
+  /** 输入框上方的窄下拉(fzf 式 Tab 补齐, 行数见 CFG.kbdRows): 打字过滤, ↑/↓/Tab 选择, Enter 确认; resolve 为选中项, Esc 为 null。
+   *  '~' 开头的项禁用(暗色、跳过、不可选; resolve 不含 '~')。opts.below = [对话框 id, 按钮键]: 贴在该按钮正下方、同宽, 搜索行在顶上(下拉框) */
+  function inlineKbd(items, opts = {}) {
     const id = ++seq;
     return new Promise(resolve => {
       dialogs.set(id, { active() {}, press(key) { dialogs.delete(id); sess.dialogClose(id); resolve(key); } });
-      sess.kbdOpen(id, [...items]);
+      sess.kbdOpen(id, [...items], opts);
     });
   }
 

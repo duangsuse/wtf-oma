@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """图形协议画矩形 + 补间动画, 独立进程。菜单(menu.js)只管声明"现在应有哪些矩形", 这里负责补间与终端图像。
 
-两种用法, 矩形语法相同:  [key=][from->]x,y,w,h[#rrggbb][@z]    单位=字符格, 可小数; key 缺省取序号
+两种用法, 矩形语法相同:  [key=][from->]x,y,w,h[#rrggbb][@z]    单位=字符格, 可小数; key 缺省取序号; z 越大越靠上
   命令行(放完动画即退出):  gra.py DUR=180 EASE="linear(0, 0.25 25% 75%, 1)" "0,0,10,3->5,0,10,3#1f8c1f" ...
   stdin 流(进程不丢, stdin 非 tty):  每行 "首词 参数", 首词查 CMD 字典; 本进程回写的行同样按首词分派(menu.js 里的 FROM_PY)
     JS -> PY   probe          探测终端图形能力(要查询的转义序列经 out 交给对方写, 应答由对方转交 reply)
@@ -10,7 +10,9 @@
                snap <矩形...>  同 draw 但不补间(拖拽中)
                ease <linear(...)>
                dur <毫秒>      补间时长(不回应)
+               cell           重新回报像素格尺寸(终端 resize / 字体缩放后)
     PY -> JS   out <转义序列>   要写到终端的字节(对方统一输出, 保证与文字帧不交错)
+               cell <宽> <高>   像素格尺寸, 在 mode 之前发一次, 之后应 cell 请求再发
                mode shm|direct|none
                state <key...>  正在补间(未到位)的 key; 每次 draw/snap 后一定回一行, 之后集合变化时再发
                ease <N>        新曲线的控制点数, 0 = 解析失败(曲线不变)
@@ -20,7 +22,7 @@
 = 新 key 直接到位。没有 "->" = 不补间(静态底色块, 只在 layered 终端才需要)。
 
 终端分两类(首次 probe 探测):
-  shm     kitty / Ghostty / Warp / WezTerm: t=s 共享内存, 像素级精确; z=-1 的图像盖在字符背景色之上、文字之下
+  shm     kitty / Ghostty / Warp / WezTerm: t=s 共享内存, 像素级精确; 负 z(> INT32_MIN/2)的图像盖在字符背景色之上、文字之下, 按 z 叠放
   direct  Konsole 等只支持直传(t=d): zlib 压缩(o=z) + base64 分块; 它们把负 z 图像都画在字符背景色之下(menu.js 据此 layered)
   都不行 / 非 tty / 无像素尺寸 一律 none。环境变量 OMA_GRA=0 强制关闭。像素格尺寸取自 /dev/tty 的 TIOCGWINSZ(Node 没有 ioctl)。
 direct 的图放置后不能缩放, 矩形变化时取"上一帧位置 ∪ 新位置"所覆盖整格的最小外接矩形只重传这一块; shm 只在尺寸/颜色变化时重传。"""
@@ -89,7 +91,13 @@ _n = _seq = 0
 def setmode(m):
     global mode
     mode = m
+    if m: cell_(None)
     send("mode " + (m or "none"))
+
+def cell_(_):
+    """回报像素格尺寸 "cell 宽 高"(menu.js 按它算 svg 比例的形状); 字体缩放后对方再问一次"""
+    px = cell()
+    if px: send("cell %d %d" % px)
 
 def cell():
     """(格宽px, 格高px); 取不到像素尺寸返回 None"""
@@ -197,7 +205,7 @@ def render(rects, snap):
     for k, (x, y, w, h, *c) in tween(rects, snap).items():
         box = (round(x * cw), round(y * ch), max(1, round(w * cw)), max(1, round(h * ch)))
         rgb = tuple(max(0, min(255, int(v))) for v in c)
-        z = _LAYER + rects[k][3] if mode == "direct" else -1
+        z = _LAYER + rects[k][3]                                 # 两类终端都按 Box 次序叠放(shm 里仍在字符背景之上)
         cur = live.get(k)                                        # [image id, 图像/像素矩形签名, 放置/(rgb, z)签名]
         if cur is None:
             _seq += 1; cur = live[k] = [_BASE + _seq, None, None]
@@ -222,7 +230,7 @@ def render(rects, snap):
     if buf: out("\x1b7" + "".join(buf) + "\x1b8")
 
 # ---------- 命令 ----------
-SPEC = re.compile(r"(?:(\w+)=)?(?:([-\d.,]*)->)?([-\d.,]+)(?:#([0-9a-fA-F]{6}))?(?:@(-?\d+))?$")
+SPEC = re.compile(r"(?:([\w:]+)=)?(?:([-\d.,]*)->)?([-\d.,]+)(?:#([0-9a-fA-F]{6}))?(?:@(-?\d+))?$")
 
 def spec(i, s):
     """'[key=][from->]x,y,w,h[#rrggbb][@z]' -> (key, (from|None, to, rgb, z, 是否补间))"""
@@ -251,7 +259,7 @@ def dur(rest):
     global DUR
     DUR = float(rest) / 1000
 
-CMD = {f.__name__: f for f in (probe, reply, draw, snap, ease, dur)}
+CMD = {f.__name__.rstrip("_"): f for f in (probe, reply, draw, snap, ease, dur, cell_)}
 
 def tick():
     before = set(moving)

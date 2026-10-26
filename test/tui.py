@@ -511,7 +511,6 @@ def _segment_cast(path, title, first, events, t_from, t_to):
             if kind == "o" and t_from < t <= t_to:
                 f.write(json.dumps([round(t - t_from, 6), "o", data],
                                    ensure_ascii=False) + "\n")
-        f.write(json.dumps([round(t_to - t_from + 0.5, 6), "o", ""]) + "\n")
 
 
 def run_file(path):
@@ -566,12 +565,21 @@ def main(paths):
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, here)
     sys.modules.setdefault("tui", sys.modules[__name__])  # test files: from tui import *
+    explicit = bool(paths)
     paths = paths or sorted(glob.glob(os.path.join(here, "[0-9]*.py")))
     os.makedirs(OUT, exist_ok=True)
+    rpath = os.path.join(OUT, "results.json")
+    stems = {os.path.splitext(os.path.basename(p))[0] for p in paths}
+    keep = []
+    if explicit and os.path.exists(rpath):     # partial rerun: keep other files' results
+        with open(rpath) as f:
+            keep = [t for t in json.load(f)["tests"] if t["id"][:-3] not in stems]
     for n in os.listdir(OUT):
-        os.remove(os.path.join(OUT, n))
+        if not explicit or n.split(".")[0].split("_")[0] in stems:
+            os.remove(os.path.join(OUT, n))
     results = [r for p in paths for r in run_file(p)]
-    with open(os.path.join(OUT, "results.json"), "w") as f:
+    results = sorted(keep + results, key=lambda r: r["id"])
+    with open(rpath, "w") as f:
         json.dump({"tests": results}, f, ensure_ascii=False, indent=1)
     passed = sum(r["ok"] for r in results)
     print(f"{passed}/{len(results)} passed; output in {os.path.relpath(OUT)}")
